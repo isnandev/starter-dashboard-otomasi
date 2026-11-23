@@ -285,19 +285,19 @@ function PanduanAwal({ data, keHalaman, onUji }: { data: DataDashboard; keHalama
       <CardContent>
         <ol className="flex flex-col gap-3">
           {langkah.map((l, i) => (
-            <li key={l.judul} className="flex items-center gap-4 rounded-lg border p-4">
+            <li key={l.judul} className="flex flex-wrap items-center gap-4 rounded-lg border p-4">
               <span
                 className={cn('flex size-9 shrink-0 items-center justify-center rounded-full text-base font-semibold', l.selesai ? 'bg-success text-white' : 'bg-muted')}
                 aria-label={l.selesai ? 'selesai' : `langkah ${i + 1}`}
               >
                 {l.selesai ? <Check className="size-5" /> : i + 1}
               </span>
-              <div className="flex-1">
+              <div className="min-w-48 flex-1">
                 <p className="text-base font-semibold">{l.judul}</p>
                 <p className="text-sm text-muted-foreground">{l.isi}</p>
               </div>
               {'tombol' in l && l.tombol && (
-                <Button variant={l.selesai ? 'ghost' : 'outline'} className="h-10" onClick={l.aksi} disabled={!l.aksi}>
+                <Button variant={l.selesai ? 'ghost' : 'outline'} className="h-10 w-full sm:w-auto" onClick={l.aksi} disabled={!l.aksi}>
                   {l.tombol}
                 </Button>
               )}
