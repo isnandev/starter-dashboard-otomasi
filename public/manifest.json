@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "Dashboard Otomasi",
+  "version": "0.1.0",
+  "description": "Otomasi usahamu dari satu dashboard. Data tersimpan di komputermu sendiri; halaman web disambungkan lewat extension ini.",
+  "action": { "default_title": "Buka dashboard" },
+  "background": { "service_worker": "background.js", "type": "module" },
+  "permissions": ["alarms", "notifications", "tabs", "scripting", "storage"],
+  "host_permissions": [],
+  "optional_host_permissions": ["https://*/*", "http://*/*"],
+  "icons": { "128": "icon-128.png" }
+}
