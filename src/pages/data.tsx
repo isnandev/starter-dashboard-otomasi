@@ -12,7 +12,7 @@ import type { DataDashboard } from '@/hooks/use-data'
 import { buatCadangan, gantiSemuaBaris, hapusBaris, simpanBaris, tambahRiwayat } from '@/lib/db'
 import { bacaCsv, formatCsv, periksaBaris, rapikanBaris } from '@/lib/periksa'
 import type { Baris, Tabel } from '@/lib/types'
-import { cn, unduhFile } from '@/lib/utils'
+import { cn, tanggalRamah, unduhFile } from '@/lib/utils'
 
 // The main storage: every table of the business, on this computer.
 
@@ -200,7 +200,7 @@ function IsiTabel({ tabel, baris, muat, onCadangan }: { tabel: Tabel; baris: Bar
                     <TableRow key={kunci}>
                       {tabel.kolom.map((k) => (
                         <TableCell key={k.id} className={cn(k.jenis === 'angka' && 'text-right tabular-nums', k.id === tabel.kunci && 'font-medium')}>
-                          {b[k.id] ?? ''}
+                          {k.jenis === 'tanggal' && b[k.id] ? tanggalRamah(String(b[k.id])) : (b[k.id] ?? '')}
                         </TableCell>
                       ))}
                       <TableCell className="text-right whitespace-nowrap">

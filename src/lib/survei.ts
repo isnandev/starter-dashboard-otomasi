@@ -12,7 +12,12 @@ export interface HasilSurvei {
   waktu: number
   bingkai: number
   judulBagian: string[]
-  tabel: { penanda: string; kolom: string[]; jumlahBaris: number; contoh: string[][] }[]
+  /**
+   * `baris`/`sel`: the shape of one data row and its cells (tag, role, data-*
+   * attribute names), `isiSel`: what each cell holds ("teks" or the input,
+   * select, button or link inside it).
+   */
+  tabel: { penanda: string; baris: string; sel: string; kolom: string[]; isiSel: string[]; jumlahBaris: number; contoh: string[][] }[]
   daftar: { penanda: string; item: string; jumlah: number; contoh: string[] }[]
   isian: { label: string; penanda: string; jenis: string; nilai: string }[]
   tombol: string[]
@@ -38,6 +43,12 @@ export function surveiHalaman(): HasilSurvei {
     const kelas = [...el.classList].filter((c) => !/\d{3,}|^css-|^sc-|__/.test(c)).slice(0, 2)
     return tag + kelas.map((c) => `.${css(c)}`).join('')
   }
+  // The shape shared by every row or cell of a kind: tag, role, data-* attribute names (not values).
+  const bentuk = (el: Element) => {
+    const role = el.getAttribute('role')
+    const data = el.getAttributeNames().filter((a) => a.startsWith('data-'))
+    return el.tagName.toLowerCase() + (role ? `[role="${role}"]` : '') + data.map((a) => `[${a}]`).join('')
+  }
   const sel = (r: Element) => [...r.querySelectorAll(':scope > th, :scope > td, :scope > [role=cell], :scope > [role=gridcell], :scope > [role=columnheader]')]
 
   const judulBagian = [...document.querySelectorAll('h1, h2, h3, [role=heading]')].filter(terlihat).map(teks).filter(Boolean).slice(0, 20)
@@ -47,9 +58,17 @@ export function surveiHalaman(): HasilSurvei {
     .slice(0, 5)
     .map((t) => {
       const baris = [...t.querySelectorAll('tr, [role=row]')]
+      const contohBaris = baris[1]
+      const selPertama = contohBaris ? sel(contohBaris)[0] : undefined
       return {
         penanda: penanda(t),
+        baris: contohBaris ? bentuk(contohBaris) : '',
+        sel: selPertama ? bentuk(selPertama) : '',
         kolom: sel(baris[0] ?? t).map(teks),
+        isiSel: contohBaris ? sel(contohBaris).map((c) => {
+          const isi = c.querySelector('input, select, textarea, button, a[href]')
+          return isi ? penanda(isi) : 'teks'
+        }) : [],
         jumlahBaris: Math.max(0, baris.length - 1),
         contoh: baris.slice(1, 4).map((b) => sel(b).map(teks)),
       }

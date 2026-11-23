@@ -15,6 +15,20 @@ export function keAngka(v: Nilai | undefined): number {
   return Number(s)
 }
 
+/**
+ * Dates as owners write them: "20/11/2026", "20-11-2026", "2026-11-20" (day
+ * first, the Indonesian way). Returns "2026-11-20", or null when it isn't a real date.
+ */
+export function keTanggal(v: Nilai | undefined): string | null {
+  const s = String(v ?? '').trim()
+  const m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s) ?? /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/.exec(s)
+  if (!m) return null
+  const [t, b, h] = m[1].length === 4 ? [m[1], m[2], m[3]] : [m[3], m[2], m[1]]
+  const d = new Date(Date.UTC(+t, +b - 1, +h))
+  if (d.getUTCMonth() !== +b - 1 || d.getUTCDate() !== +h) return null
+  return d.toISOString().slice(0, 10)
+}
+
 const kosong = (v: Nilai | undefined) => v === undefined || String(v).trim() === ''
 
 /** Checks one row against a local table. Returns the problem in plain words, or null. */
@@ -26,7 +40,7 @@ export function periksaBaris(tabel: Tabel, b: Baris): string | null {
       continue
     }
     if (k.jenis === 'angka' && !Number.isFinite(keAngka(v))) return `"${k.label}" harus angka, bukan "${v}"`
-    if (k.jenis === 'tanggal' && Number.isNaN(Date.parse(String(v)))) return `"${k.label}" harus tanggal (contoh 2026-11-23), bukan "${v}"`
+    if (k.jenis === 'tanggal' && !keTanggal(v)) return `"${k.label}" harus tanggal (contoh 23/11/2026), bukan "${v}"`
     if (k.jenis === 'pilihan' && k.pilihan && !k.pilihan.includes(String(v)))
       return `"${k.label}" harus salah satu dari: ${k.pilihan.join(', ')}`
   }
@@ -39,7 +53,7 @@ export function rapikanBaris(tabel: Tabel, b: Baris): Baris {
   for (const k of tabel.kolom) {
     const v = b[k.id]
     if (kosong(v)) continue
-    hasil[k.id] = k.jenis === 'angka' ? keAngka(v) : String(v).trim()
+    hasil[k.id] = k.jenis === 'angka' ? keAngka(v) : k.jenis === 'tanggal' ? (keTanggal(v) ?? String(v)) : String(v).trim()
   }
   return hasil
 }

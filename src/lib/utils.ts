@@ -46,3 +46,11 @@ export function unduhFile(namaFile: string, isi: string, tipe = 'application/jso
 export function isiTemplate(teks: string, baris: Record<string, string | number>): string {
   return teks.replace(/\{(\w+)\}/g, (_, k: string) => String(baris[k] ?? ''))
 }
+
+const fmtTanggalPanjang = new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
+
+/** "2026-11-20" → "20 Nov 2026". */
+export function tanggalRamah(iso: string): string {
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? iso : fmtTanggalPanjang.format(d)
+}
