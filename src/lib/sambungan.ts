@@ -1,7 +1,8 @@
 import { sambungan as semuaSambungan } from '@/sambungan'
 import type { Sambungan } from '@/sambungan/types'
 import { ambil, simpan, tambahRiwayat } from './db'
-import { bandingkanTulisan, periksaBacaan } from './periksa'
+import { cekTulisan, periksaBacaan } from './periksa'
+import { sensorBaris } from './sensor'
 import type { Baris, Bukti, Perubahan, StatusSambungan } from './types'
 
 // Proof for every connection. A sambungan is "terbukti" (proven) only after
@@ -101,9 +102,13 @@ export async function bacaTerbukti(s: Sambungan): Promise<{ baris: Baris[]; bukt
     return gagal(
       s,
       { pesan: `Data yang terbaca belum benar: ${masalah[0]}`, saran: 'Salin laporan untuk agent. Agent perlu survei ulang halamannya.' },
-      { masalah, contoh: Array.isArray(baris) ? baris.slice(0, 3) : baris, halaman: alamat(tab.url) },
+      { masalah, contoh: Array.isArray(baris) ? sensorBaris(baris.slice(0, 3), s.kolom) : baris, halaman: alamat(tab.url) },
     )
   }
+  return { baris, bukti: await simpanBukti(s, tab, baris) }
+}
+
+async function simpanBukti(s: Sambungan, tab: chrome.tabs.Tab, baris: Baris[]): Promise<Bukti> {
   const bukti: Bukti = { waktu: Date.now(), halaman: alamat(tab.url), jumlah: baris.length, contoh: baris.slice(0, 3) }
   await simpanStatus({
     id: s.id,
@@ -112,7 +117,32 @@ export async function bacaTerbukti(s: Sambungan): Promise<{ baris: Baris[]; bukt
     pesan: `${bukti.jumlah} baris terbaca dari ${new URL(bukti.halaman).host}`,
     bukti,
   })
-  return { baris, bukti }
+  return bukti
+}
+
+/** One read for re-checking a write: throws instead of recording a failure, so a retry can follow. */
+async function bacaUntukCek(s: Sambungan, tab: chrome.tabs.Tab): Promise<Baris[]> {
+  const baris = await s.baca(tab)
+  const masalah = periksaBacaan(s, baris)
+  if (masalah.length) throw new Error(masalah[0])
+  return baris
+}
+
+/** Reloads the tab and waits until it has finished loading (at most 20 s). */
+function muatUlangTab(tabId: number): Promise<void> {
+  return new Promise((selesai) => {
+    const beres = () => {
+      clearTimeout(batas)
+      chrome.tabs.onUpdated.removeListener(dengar)
+      selesai()
+    }
+    const dengar = (id: number, info: { status?: string }) => {
+      if (id === tabId && info.status === 'complete') beres()
+    }
+    const batas = setTimeout(beres, 20_000)
+    chrome.tabs.onUpdated.addListener(dengar)
+    chrome.tabs.reload(tabId).catch(beres)
+  })
 }
 
 /** The "Tes sambungan" button: read once, show the proof, write it to the history. */
@@ -144,24 +174,37 @@ export async function tulisTerbukti(s: Sambungan, perubahan: Perubahan[]): Promi
   } catch (e) {
     return gagal(s, jelaskan(s, e), e)
   }
-  // ponytail: fixed waits (1 s, then 3 s); give the sambungan its own wait if a page saves slower.
-  let belum = perubahan
-  for (const tunggu of [1000, 3000]) {
-    await new Promise((r) => setTimeout(r, tunggu))
-    const { baris } = await bacaTerbukti(s)
-    belum = bandingkanTulisan(perubahan, baris, s.kunci)
-    if (!belum.length) return
+  // Re-read until the change shows; reload the page once if it keeps showing
+  // the old values (see JADWAL_CEK_TULISAN). A failed write must never be
+  // reported as done, and a write that landed must not be reported as failed.
+  const tabId = tab.id
+  const cek = await cekTulisan(perubahan, s.kunci, {
+    baca: () => bacaUntukCek(s, tab),
+    muatUlang: s.muatUlangSaatCek === false || !tabId ? undefined : () => muatUlangTab(tabId),
+  })
+  if (!cek.belum.length && cek.baris) {
+    await simpanBukti(s, tab, cek.baris)
+    return
   }
+  const saranCekDulu =
+    'Jangan langsung coba lagi: perubahannya bisa saja sudah tersimpan. Refresh halamannya, lihat angkanya sendiri, baru putuskan. Kalau memang belum berubah, salin laporan untuk agent.'
   return gagal(
     s,
-    {
-      pesan: `${belum.length} dari ${perubahan.length} perubahan tidak terlihat di halaman setelah disimpan`,
-      saran: 'Cek halamannya. Salin laporan untuk agent supaya cara menyimpannya diperbaiki.',
-    },
-    { belumBerubah: belum },
+    cek.baris
+      ? {
+          pesan: `${cek.belum.length} dari ${perubahan.length} perubahan belum terlihat di halaman${cek.dimuatUlang ? ', juga setelah halamannya dimuat ulang' : ''}`,
+          saran: saranCekDulu,
+        }
+      : { pesan: 'Setelah menyimpan, halamannya tidak bisa dibaca ulang', saran: saranCekDulu },
+    { belumBerubah: cek.belum, catatanCek: cek.catatan },
   )
 }
 
+/**
+ * The bukti as text for the agent. Sample rows are censored (sensor.ts):
+ * only columns marked `aman` keep their text, numbers always stay. The
+ * dashboard's own bukti table keeps the real values for the owner.
+ */
 export function laporanBukti(s: Sambungan, bukti: Bukti): string {
   return [
     'Bukti sambungan dari Dashboard Otomasi',
@@ -169,7 +212,7 @@ export function laporanBukti(s: Sambungan, bukti: Bukti): string {
     `Halaman: ${bukti.halaman}`,
     `Waktu: ${new Date(bukti.waktu).toLocaleString('id-ID')}`,
     `Jumlah baris terbaca: ${bukti.jumlah}`,
-    'Contoh baris (bandingkan dengan yang terlihat di halaman):',
-    JSON.stringify(bukti.contoh, null, 2),
+    'Contoh baris (disensor: nomor HP diganti, teks pribadi jadi huruf depan; angka tetap):',
+    JSON.stringify(sensorBaris(bukti.contoh, s.kolom), null, 2),
   ].join('\n')
 }

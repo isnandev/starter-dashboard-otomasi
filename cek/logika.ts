@@ -1,8 +1,10 @@
 // `npm run cek`: checks the proof rules with plain Node (no browser, no test framework).
 // If one of these fails, the dashboard could call a broken connection "terbukti".
 import assert from 'node:assert/strict'
-import { bacaCsv, bandingkanTulisan, keAngka, keTanggal, periksaBacaan, periksaBaris } from '../src/lib/periksa.ts'
-import type { Tabel } from '../src/lib/types.ts'
+import { bacaCsv, bandingkanTulisan, cekTulisan, keAngka, keTanggal, periksaBacaan, periksaBaris } from '../src/lib/periksa.ts'
+import { samarkanTeks, sensorBaris, sensorSurvei, sensorTeks } from '../src/lib/sensor.ts'
+import type { HasilSurvei } from '../src/lib/survei.ts'
+import type { Baris, Tabel } from '../src/lib/types.ts'
 
 const s = { kunci: 'kode', kolom: [{ id: 'kode', label: 'Kode' }, { id: 'jumlah', label: 'Jumlah', jenis: 'angka' as const }] }
 
@@ -35,6 +37,97 @@ const p = [{ kunci: 'A1', kolom: 'jumlah', ke: 5 }, { kunci: 'A2', kolom: 'jumla
 assert.deepEqual(bandingkanTulisan(p, [{ kode: 'A1', jumlah: '5' }, { kode: 'A2', jumlah: '7' }], 'kode'), [])
 assert.deepEqual(bandingkanTulisan(p, [{ kode: 'A1', jumlah: '5' }, { kode: 'A2', jumlah: '9' }], 'kode').map((x) => x.kunci), ['A2'])
 assert.deepEqual(bandingkanTulisan(p, [{ kode: 'A1', jumlah: '5' }], 'kode').map((x) => x.kunci), ['A2'])
+
+// A write that landed but only shows after a refresh is NOT "gagal".
+// (Module test 25 Nov: the page kept the old number until reloaded.)
+{
+  const tunggu: number[] = []
+  const tidur = async (ms: number) => void tunggu.push(ms)
+  const satu = [{ kunci: 'A1', kolom: 'jumlah', ke: 31 }]
+  let halaman: Baris[] = [{ kode: 'A1', jumlah: '30' }] // stale until reloaded
+  let dimuat = 0
+  const h = await cekTulisan(satu, 'kode', {
+    baca: async () => halaman,
+    muatUlang: async () => {
+      dimuat++
+      halaman = [{ kode: 'A1', jumlah: '31' }]
+    },
+    tidur,
+  })
+  assert.deepEqual(h.belum, [])
+  assert.equal(h.dimuatUlang, true)
+  assert.equal(dimuat, 1)
+  assert.deepEqual(h.baris, [{ kode: 'A1', jumlah: '31' }])
+
+  // A read that fails while the page is still drawing is retried, not a failure.
+  let ke = 0
+  const h2 = await cekTulisan(satu, 'kode', {
+    baca: async () => {
+      if (++ke < 3) throw new Error('Kolom "Harga" kosong di semua baris')
+      return [{ kode: 'A1', jumlah: 31 }]
+    },
+    tidur,
+  })
+  assert.deepEqual(h2.belum, [])
+  assert.match(h2.catatan[0], /belum bisa dibaca/)
+
+  // A write that never landed is still reported, after the reload.
+  const h3 = await cekTulisan(satu, 'kode', { baca: async () => [{ kode: 'A1', jumlah: '30' }], muatUlang: async () => {}, tidur })
+  assert.equal(h3.belum.length, 1)
+  assert.equal(h3.dimuatUlang, true)
+
+  // Without a reload (sambungan opted out) the reload step is skipped, not faked.
+  const h4 = await cekTulisan(satu, 'kode', { baca: async () => [{ kode: 'A1', jumlah: '30' }], tidur })
+  assert.equal(h4.dimuatUlang, false)
+  assert.equal(h4.belum.length, 1)
+
+  // No read worked at all: no rows, so the dashboard can't call it proven.
+  const h5 = await cekTulisan(satu, 'kode', { baca: async () => { throw new Error('tab ditutup') }, tidur })
+  assert.equal(h5.baris, undefined)
+}
+
+// Sensor: what is copied to the agent has no phone numbers, e-mails or names.
+assert.equal(sensorTeks('WA 0812-3456-7890 ya'), 'WA [nomor HP] ya')
+assert.equal(sensorTeks('+62 812 3456 7890'), '[nomor HP]')
+assert.equal(sensorTeks('6281234567890'), '[nomor HP]')
+assert.equal(sensorTeks('kirim ke contoh@tokokue-ani.id'), 'kirim ke [email]')
+assert.equal(sensorTeks('NIK 3507012345678901'), 'NIK [angka panjang]')
+// Prices, stock, dates and sizes keep their format.
+assert.equal(sensorTeks('Rp 12.500 · stok 30 · 20/11/2026 · 250gr'), 'Rp 12.500 · stok 30 · 20/11/2026 · 250gr')
+assert.equal(samarkanTeks('Bu Siti, 3 bks keripik 250gr'), 'B… S…, 3 b… k… 250gr')
+assert.equal(samarkanTeks('Stok Habis', new Set(['stok'])), 'Stok H…')
+{
+  const survei: HasilSurvei = {
+    halaman: 'https://web.contoh.id/chat',
+    judul: 'Chat',
+    waktu: 0,
+    bingkai: 0,
+    bagian: 'bagian utama halaman',
+    judulBagian: ['Ani Lestari'],
+    tabel: [{ penanda: 'table', baris: 'tr', sel: 'td', kolom: ['Nama', 'Stok'], isiSel: ['teks', 'teks'], jumlahBaris: 2, contoh: [['Ani Lestari', '30'], ['Pak Budi 081234567890', '2']] }],
+    daftar: [{ penanda: 'div', item: 'div.pesan', jumlah: 5, contoh: ['Mbak, pesen 2 ya, kirim ke Jl. Melati 5', 'ok', 'Makasih kak'] }],
+    isian: [{ label: 'Cari', penanda: 'input[name="q"]', jenis: 'text', nilai: 'Ani' }],
+    tombol: ['Kirim'],
+    atribut: [],
+  }
+  const s = sensorSurvei(survei)
+  const teks = JSON.stringify(s)
+  for (const pribadi of ['Ani', 'Lestari', 'Budi', '081234567890', 'Melati']) assert.ok(!teks.includes(pribadi), `"${pribadi}" lolos sensor`)
+  assert.equal(s.disensor, true)
+  assert.deepEqual(s.tabel[0].kolom, ['Nama', 'Stok'])
+  assert.equal(s.tabel[0].contoh[0][1], '30')
+  assert.equal(s.isian[0].penanda, 'input[name="q"]')
+}
+// Bukti rows: only `aman` columns keep their text; numbers stay.
+assert.deepEqual(
+  sensorBaris([{ produk: 'Keripik Balado 250gr', pembeli: 'Bu Siti', hp: '0812 3456 7890', stok: 30 }], [
+    { id: 'produk', label: 'Produk', aman: true },
+    { id: 'pembeli', label: 'Pembeli' },
+    { id: 'hp', label: 'HP' },
+    { id: 'stok', label: 'Stok', jenis: 'angka' },
+  ]),
+  [{ produk: 'Keripik Balado 250gr', pembeli: 'B… S…', hp: '[nomor HP]', stok: 30 }],
+)
 
 // Local tables: rows are checked against the columns.
 const t: Tabel = {

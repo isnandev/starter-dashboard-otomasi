@@ -88,7 +88,7 @@ export function Pengaturan({ data, muat }: { data: DataDashboard; muat: () => Pr
       <Card>
         <CardHeader>
           <CardTitle className="text-xl">Data</CardTitle>
-          <CardDescription className="text-base">Semua data tersimpan di komputer ini. Tidak ada yang dikirim ke internet.</CardDescription>
+          <CardDescription className="text-base">Semua data tersimpan di komputer ini. Yang kamu tempel ke agent dikirim ke AI-nya, jadi sensor dulu nama dan nomor pembeli.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
           <Button variant="outline" className="h-11 text-base" onClick={() => fileRef.current?.click()}>

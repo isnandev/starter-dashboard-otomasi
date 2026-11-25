@@ -136,6 +136,7 @@ function Survei({
   const [tab, setTab] = useState<chrome.tabs.Tab[]>([])
   const [sibuk, setSibuk] = useState<number | null>(null)
   const [galat, setGalat] = useState<string | null>(null)
+  const [asli, setAsli] = useState(false)
 
   async function muatTab() {
     if (!diExtension) return
@@ -169,6 +170,11 @@ function Survei({
         <CardDescription className="text-base">
           Sebelum agent membuat sambungan, survei dulu halaman yang mau disambungkan: buka halamannya di Chrome dan login, lalu tekan{' '}
           <b>Survei halaman ini</b>. Salin hasilnya ke agent, supaya agent membangun dari halaman yang asli, bukan tebakan.
+        </CardDescription>
+        <CardDescription className="text-base">
+          Supaya yang disurvei hanya daftar yang mau disambungkan: di halaman itu, <b>sorot (blok) sedikit teks dari dua baris daftarnya</b>,
+          lalu tekan Survei. Tanpa sorotan, yang disurvei jendela yang terbuka atau bagian utama halaman, bukan daftar di samping (misalnya
+          daftar chat).
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
@@ -211,9 +217,14 @@ function Survei({
           <div className="flex flex-col gap-3">
             <p className="text-base font-medium">Hasil survei</p>
             <p className="text-sm text-muted-foreground">
-              Berisi struktur halaman dan paling banyak 3 contoh baris dari halamannya. Kata sandi tidak pernah dibaca. Periksa dulu sebelum
+              Berisi struktur halaman dan paling banyak 3 contoh baris dari halamannya. Kata sandi tidak pernah dibaca. Yang disalin untuk
+              agent <b>sudah disensor</b>: nomor HP dan email diganti, nama dan isi chat jadi huruf depannya saja. Tetap periksa dulu sebelum
               menempelnya ke agent.
             </p>
+            <label className="flex items-start gap-2 text-sm">
+              <input type="checkbox" className="mt-1 size-4" checked={asli} onChange={(e) => setAsli(e.target.checked)} />
+              <span>Salin teks contoh apa adanya (tanpa sensor). Hanya untuk halaman tanpa data pelanggan, misalnya daftar produk.</span>
+            </label>
             {data.survei.map((h) => (
               <div key={h.halaman} className="flex flex-col gap-2 rounded-lg border p-3">
                 <p className="text-base font-semibold">{h.judul || h.halaman}</p>
@@ -221,12 +232,13 @@ function Survei({
                   {h.halaman} · {waktuRamah(h.waktu)}
                 </p>
                 <p className="text-sm">{ringkasSurvei(h)}</p>
+                {h.bagian && <p className="text-sm text-muted-foreground">Yang disurvei: {h.bagian}</p>}
                 {h.tabel.map((t, i) => (
                   <p key={i} className="text-sm text-muted-foreground">
                     Tabel {i + 1}: {t.kolom.filter(Boolean).join(' · ') || '(tanpa judul kolom)'} ({t.jumlahBaris} baris)
                   </p>
                 ))}
-                <Button variant="outline" className="h-10 w-fit" onClick={() => salin(laporanSurvei(h), `survei-${h.halaman}`)}>
+                <Button variant="outline" className="h-10 w-fit" onClick={() => salin(laporanSurvei(h, { asli }), `survei-${h.halaman}`)}>
                   {disalin === `survei-${h.halaman}` ? <Check /> : <ClipboardCopy />}
                   {disalin === `survei-${h.halaman}` ? 'Hasil survei disalin' : 'Salin hasil survei untuk agent'}
                 </Button>

@@ -4,6 +4,7 @@ import { BelumAdaData } from '@/components/belum-ada-data'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import type { DataDashboard } from '@/hooks/use-data'
+import { sensorTeks } from '@/lib/sensor'
 import type { JenisRiwayat, Riwayat as EntriRiwayat } from '@/lib/types'
 import { cn, waktuRamah } from '@/lib/utils'
 
@@ -20,8 +21,17 @@ const ikon: Record<JenisRiwayat, typeof Play> = {
   pengaturan: Settings,
 }
 
-/** What the copy button copies, per kind of entry. */
+/**
+ * What the copy button copies, per kind of entry. Everything goes through
+ * sensorTeks: it goes to the agent's AI, so no phone numbers or e-mails.
+ * (Survey and bukti entries are already censored when they are written.)
+ */
 function salinan(r: EntriRiwayat): { label: string; teks: string } | null {
+  const s = isiSalinan(r)
+  return s && { ...s, teks: sensorTeks(s.teks) }
+}
+
+function isiSalinan(r: EntriRiwayat): { label: string; teks: string } | null {
   if (!r.teknis) return null
   if (r.jenis === 'survei') return { label: 'Salin hasil survei untuk agent', teks: r.teknis }
   if (r.jenis === 'sambungan') return { label: 'Salin bukti untuk agent', teks: r.teknis }

@@ -62,6 +62,13 @@ export interface KolomSambungan {
   id: string
   label: string
   jenis?: 'teks' | 'angka'
+  /**
+   * True when this column never holds personal data (product name, price,
+   * stock, status). Its text is then copied to the agent as-is. Leave it out
+   * for names, phone numbers, addresses, chat text: those are censored in
+   * everything copied to the agent.
+   */
+  aman?: boolean
 }
 
 /**
@@ -104,6 +111,67 @@ const sama = (a: Nilai | undefined, b: Nilai) =>
 export function bandingkanTulisan(perubahan: Perubahan[], sesudah: Baris[], kunci: string): Perubahan[] {
   const perKunci = new Map(sesudah.map((b) => [String(b[kunci]), b]))
   return perubahan.filter((p) => !sama(perKunci.get(p.kunci)?.[p.kolom], p.ke))
+}
+
+export interface LangkahCek {
+  /** Wait this long (ms) before reading. */
+  tunggu: number
+  /** Reload the page first (skipped when the sambungan can't be reloaded). */
+  muatUlang?: boolean
+}
+
+/**
+ * When the dashboard re-reads after a write. Many pages (a marketplace
+ * product list, for one) save the change but keep showing the old number
+ * until the page is refreshed. Calling that "gagal" made owners retry a write
+ * that had already landed, which can apply it twice. So: two quick re-reads,
+ * then one reload of the page and two more re-reads.
+ */
+export const JADWAL_CEK_TULISAN: LangkahCek[] = [{ tunggu: 1000 }, { tunggu: 3000 }, { tunggu: 2000, muatUlang: true }, { tunggu: 4000 }]
+
+export interface HasilCekTulisan {
+  /** Changes that still don't show. Empty = proven. */
+  belum: Perubahan[]
+  /** Rows of the last successful read (undefined when no read worked). */
+  baris?: Baris[]
+  dimuatUlang: boolean
+  /** One plain line per re-read, for the history. */
+  catatan: string[]
+}
+
+/**
+ * Re-reads the page until every change shows, following `jadwal`. A read
+ * that fails (page still loading, list not drawn yet) is retried at the next
+ * step instead of counting as a failed write. Pure: the page access comes in
+ * through `alat`, so `npm run cek` can test it without a browser.
+ */
+export async function cekTulisan(
+  perubahan: Perubahan[],
+  kunci: string,
+  alat: { baca: () => Promise<Baris[]>; muatUlang?: () => Promise<void>; tidur?: (ms: number) => Promise<void> },
+  jadwal: LangkahCek[] = JADWAL_CEK_TULISAN,
+): Promise<HasilCekTulisan> {
+  const tidur = alat.tidur ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)))
+  const hasil: HasilCekTulisan = { belum: perubahan, dimuatUlang: false, catatan: [] }
+  for (const [i, langkah] of jadwal.entries()) {
+    if (langkah.muatUlang) {
+      if (!alat.muatUlang) continue
+      await alat.muatUlang()
+      hasil.dimuatUlang = true
+      hasil.catatan.push('Halaman dimuat ulang supaya angka terbarunya tampil')
+    }
+    await tidur(langkah.tunggu)
+    try {
+      const baris = await alat.baca()
+      hasil.baris = baris
+      hasil.belum = bandingkanTulisan(perubahan, baris, kunci)
+      hasil.catatan.push(`Cek ${i + 1}: ${hasil.belum.length ? `${hasil.belum.length} perubahan belum terlihat` : 'semua perubahan terlihat'}`)
+      if (!hasil.belum.length) return hasil
+    } catch (e) {
+      hasil.catatan.push(`Cek ${i + 1}: halaman belum bisa dibaca (${e instanceof Error ? e.message : String(e)})`)
+    }
+  }
+  return hasil
 }
 
 // ── CSV ──────────────────────────────────────────────────────────────────

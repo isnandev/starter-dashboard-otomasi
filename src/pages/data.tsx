@@ -78,6 +78,14 @@ function IsiTabel({ tabel, baris, muat, onCadangan }: { tabel: Tabel; baris: Bar
   const [galat, setGalat] = useState<string | null>(null)
   const [ubah, setUbah] = useState<Baris | 'baru' | null>(null)
 
+  async function simpanImpor() {
+    if (!impor) return
+    await gantiSemuaBaris(tabel, impor.baris)
+    await tambahRiwayat({ jenis: 'impor', ringkas: `Impor ${impor.baris.length} baris ${tabel.nama} dari ${impor.nama}` })
+    setImpor(null)
+    await muat()
+  }
+
   async function pilihFile(f: File | undefined) {
     setGalat(null)
     if (!f) return
@@ -126,26 +134,35 @@ function IsiTabel({ tabel, baris, muat, onCadangan }: { tabel: Tabel; baris: Bar
         {impor && (
           <div className="rounded-lg border border-warning/40 bg-warning/10 p-4">
             <p className="text-base">
-              <b>{impor.nama}</b> berisi {impor.baris.length} baris. Impor akan <b>mengganti</b> {baris.length} baris {tabel.nama} yang ada
-              sekarang.
+              <b>{impor.nama}</b> berisi {impor.baris.length} baris.{' '}
+              {baris.length > 0 ? (
+                <>
+                  Impor akan <b>mengganti</b> {baris.length} baris {tabel.nama} yang ada sekarang.
+                </>
+              ) : (
+                <>{tabel.nama} masih kosong, jadi tidak ada data yang tertimpa.</>
+              )}
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
-              <Konfirmasi
-                pemicu={<Button className="h-11 text-base">Ganti dengan isi file</Button>}
-                judul={`Ganti ${baris.length} baris ${tabel.nama}?`}
-                isi="Data sekarang akan diganti isi file. Sebaiknya buat cadangan dulu, supaya bisa dikembalikan."
-                tombolYa="Ya, ganti"
-                bahaya
-                onYa={async () => {
-                  await gantiSemuaBaris(tabel, impor.baris)
-                  await tambahRiwayat({ jenis: 'impor', ringkas: `Impor ${impor.baris.length} baris ${tabel.nama} dari ${impor.nama}` })
-                  setImpor(null)
-                  await muat()
-                }}
-              />
-              <Button variant="outline" className="h-11 text-base" onClick={onCadangan}>
-                Buat cadangan dulu
-              </Button>
+              {baris.length > 0 ? (
+                <Konfirmasi
+                  pemicu={<Button className="h-11 text-base">Ganti dengan isi file</Button>}
+                  judul={`Ganti ${baris.length} baris ${tabel.nama}?`}
+                  isi="Data sekarang akan diganti isi file. Sebaiknya buat cadangan dulu, supaya bisa dikembalikan."
+                  tombolYa="Ya, ganti"
+                  bahaya
+                  onYa={simpanImpor}
+                />
+              ) : (
+                <Button className="h-11 text-base" onClick={simpanImpor}>
+                  Impor {impor.baris.length} baris
+                </Button>
+              )}
+              {baris.length > 0 && (
+                <Button variant="outline" className="h-11 text-base" onClick={onCadangan}>
+                  Buat cadangan dulu
+                </Button>
+              )}
               <Button variant="ghost" className="h-11 text-base" onClick={() => setImpor(null)}>
                 Batal
               </Button>

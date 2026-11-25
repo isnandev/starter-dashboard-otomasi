@@ -8,8 +8,11 @@ persewaan, toko online. Dibuat untuk dikembangkan oleh **AI coding agent**
 Dua hal yang jadi dasarnya:
 
 - **Dashboard = tempat utama datamu.** Semua tabel usahamu tersimpan di
-  komputermu sendiri (local-first). Tidak ada server, tidak ada akun yang perlu
-  disetel, tidak ada yang dikirim ke internet.
+  komputermu sendiri (local-first). Tidak ada server dan tidak ada akun yang
+  perlu disetel. Tapi yang kamu tempel ke agent (contoh data, hasil survei,
+  bukti, laporan) dikirim ke AI-nya. Jadi sensor dulu nama dan nomor pembeli.
+  Tombol "Salin … untuk agent" sudah menyensor nomor HP dan teks pribadi, dan
+  kamu tetap periksa sebelum menempel.
 - **Extension = jembatan ke halaman web.** Aplikasi atau situs yang kamu pakai
   (halaman penjual marketplace, aplikasi booking, WhatsApp Web, dan lainnya)
   disambungkan lewat halaman yang sudah kamu buka dan login di Chrome. Tanpa
@@ -26,14 +29,16 @@ semua yang muncul pasti datamu sendiri.
 
 ## Cara pakai dengan AI coding agent
 
-1. Ambil starter ini ke komputermu. Paling mudah, tempel ini ke agent-mu:
-   > Ambil starter github.com/isnandev/starter-dashboard-otomasi ke folder baru
-   > bernama tools-otomasi. Kalau git tidak ada di komputerku, unduh ZIP-nya
-   > lalu ekstrak. Setelah itu jalankan npm install dan npm run build.
+1. Buat folder kosong bernama `tools-otomasi`, buka folder itu di agent-mu,
+   lalu tempel ini:
+   > Ambil starter github.com/isnandev/starter-dashboard-otomasi ke folder ini.
+   > Kalau git tidak ada di komputerku, unduh ZIP-nya lalu ekstrak di sini.
+   > Setelah itu jalankan npm install dan npm run build.
 
    Tanpa agent: tombol **Code → Download ZIP** di GitHub, lalu ekstrak. Tidak
    perlu git.
-2. Buka foldernya di agent-mu.
+2. Mulai sesi agent baru di folder `tools-otomasi` yang sama (yang berisi
+   `AGENTS.md`), supaya agent membaca aturannya.
 3. Tempel rancangan otomasimu, lalu tulis:
    > Bangun rancangan ini di atas starter ini. Ikuti AGENTS.md.
 4. Agent akan:

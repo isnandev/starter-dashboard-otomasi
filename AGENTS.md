@@ -62,6 +62,11 @@ Write where the columns came from in the table's `asal` field, e.g.
 `'contoh dari pemilik: servis-oktober.xlsx (23 Nov 2026)'` or
 `'rekomendasi agent, disetujui pemilik 23 Nov 2026'`.
 
+Set `bolehKosong: true` on tables that fill up over time (pesanan, booking
+masuk, stok masuk). They are empty on day one, and the Beranda shouldn't call
+that a problem. Tables the owner fills first (produk, stok, pelanggan) stay
+without it, so an empty one is flagged.
+
 ## Before making a sambungan: survey the real page
 
 Never guess a URL, a selector or a column of a page you haven't seen. For
@@ -69,9 +74,20 @@ every page in the rancangan's "Tempat / aplikasi":
 1. Ask the owner to open that page in Chrome and log in, then go to
    **Sambungan → Survei halaman web → Survei halaman ini** and paste
    **Salin hasil survei untuk agent** to you, with a screenshot of the page.
+   The survey covers only the part the owner highlighted, an open dialog, or
+   the page's main area (its "Yang disurvei" line says which). If it covers
+   the wrong part, ask the owner to highlight a little text from two rows of
+   the right list and survey again.
 2. Build only from the survey: its tables, repeated lists, form fields,
    buttons and attributes. Write the survey you used in the sambungan's
-   `survei` field.
+   `survei` field. Its sample rows are **censored** (names and chat text
+   become first letters, phone numbers become `[nomor HP]`); numbers, prices,
+   dates and codes are real. Never ask the owner for the uncensored text of a
+   page with customer data: build from the structure.
+   In the sambungan's `kolom`, set `aman: true` only on columns that never hold
+   personal data (product name, price, stock, status). Names, phone numbers,
+   addresses and chat text stay unmarked, so they are censored in the bukti
+   and laporan the owner copies to you.
 3. If what you need isn't in the survey (another tab of the page, a list that
    only shows after scrolling or filtering, content inside an iframe), ask for
    a survey of that view. Don't fill gaps with guesses.
