@@ -31,6 +31,12 @@ export interface Tabel {
    * pemilik 23 Nov 2026"). Never empty.
    */
   asal: string
+  /**
+   * True for tables that fill up over time from automations or daily work
+   * (pesanan, booking masuk, stok masuk). Empty on day one is normal for
+   * them, so the Beranda doesn't call it a problem.
+   */
+  bolehKosong?: boolean
 }
 
 export type Nilai = string | number

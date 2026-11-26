@@ -36,6 +36,15 @@ export interface Sambungan {
   baca(tab: chrome.tabs.Tab): Promise<Baris[]>
   /** Optional: change values on the page. The dashboard re-reads afterwards to prove it. */
   tulis?(tab: chrome.tabs.Tab, perubahan: Perubahan[]): Promise<void>
+  /**
+   * After `tulis`, when the page still shows the old values, the dashboard
+   * reloads the page once and reads again (many pages only show a saved value
+   * after a refresh). The reload comes at least 8 s after `tulis` resolves,
+   * so `tulis` must resolve only once the page confirms the save. Set false
+   * when reloading this page would lose something (a half-typed message), or
+   * when its saves can take longer than that.
+   */
+  muatUlangSaatCek?: boolean
 }
 
 /** Thrown by a sambungan (or one of its methods) that isn't built yet. Never return [] instead. */

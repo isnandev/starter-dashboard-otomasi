@@ -1,4 +1,5 @@
 import { ambil, simpan, tambahRiwayat } from './db'
+import { sensorSurvei } from './sensor'
 
 // "Survei halaman": before any sambungan is written, the extension looks at
 // the real page and reports what is on it (tables, repeated lists, form
@@ -11,6 +12,16 @@ export interface HasilSurvei {
   judul: string
   waktu: number
   bingkai: number
+  /**
+   * What was surveyed, in the owner's words: the part they highlighted, an
+   * open dialog, the page's main area, or (only when none of those exist) the
+   * whole page. Side lists such as a chat list stay out unless highlighted.
+   */
+  bagian?: string
+  /** Selector of the surveyed part ('' for the whole page). */
+  penandaBagian?: string
+  /** True on the censored copy that goes to the agent (see sensor.ts). */
+  disensor?: boolean
   judulBagian: string[]
   /**
    * `baris`/`sel`: the shape of one data row and its cells (tag, role, data-*
@@ -51,9 +62,38 @@ export function surveiHalaman(): HasilSurvei {
   }
   const sel = (r: Element) => [...r.querySelectorAll(':scope > th, :scope > td, :scope > [role=cell], :scope > [role=gridcell], :scope > [role=columnheader]')]
 
-  const judulBagian = [...document.querySelectorAll('h1, h2, h3, [role=heading]')].filter(terlihat).map(teks).filter(Boolean).slice(0, 20)
+  // What to survey, so side lists (a chat list, other customers) stay out:
+  // 1. the part the owner highlighted (sorot teks di dua baris daftarnya),
+  // 2. an open dialog, 3. the page's main area, 4. only then the whole page.
+  let akar: Element = document.body
+  let bagian = 'seluruh halaman (tidak ada bagian utama)'
+  const sorot = getSelection()
+  const daftarLike = 'table, [role=table], [role=grid], [role=list], [role=listbox], ul, ol'
+  if (sorot && !sorot.isCollapsed && sorot.rangeCount) {
+    const n = sorot.getRangeAt(0).commonAncestorContainer
+    const el = n.nodeType === Node.ELEMENT_NODE ? (n as Element) : n.parentElement
+    if (el && el !== document.body) {
+      akar = el.closest(daftarLike) ?? el
+      bagian = 'bagian yang kamu sorot'
+    }
+  } else {
+    const dialog = [...document.querySelectorAll('[role=dialog], [role=alertdialog], [aria-modal=true], dialog[open]')].filter(terlihat).pop()
+    const utama = [...document.querySelectorAll('main, [role=main]')].filter(terlihat)[0]
+    if (dialog) {
+      akar = dialog
+      bagian = 'jendela (dialog) yang sedang terbuka'
+    } else if (utama) {
+      akar = utama
+      bagian = 'bagian utama halaman'
+    }
+  }
+  const dalam = (q: string) => [...(akar.matches(q) ? [akar] : []), ...akar.querySelectorAll(q)]
+  // Sample rows: the first two and the last one (lists often put the newest last).
+  const ambilContoh = <T,>(xs: T[]) => (xs.length <= 3 ? xs : [xs[0], xs[1], xs[xs.length - 1]])
 
-  const tabel = [...document.querySelectorAll('table, [role=table], [role=grid]')]
+  const judulBagian = dalam('h1, h2, h3, [role=heading]').filter(terlihat).map(teks).filter(Boolean).slice(0, 20)
+
+  const tabel = dalam('table, [role=table], [role=grid]')
     .filter(terlihat)
     .slice(0, 5)
     .map((t) => {
@@ -70,7 +110,7 @@ export function surveiHalaman(): HasilSurvei {
           return isi ? penanda(isi) : 'teks'
         }) : [],
         jumlahBaris: Math.max(0, baris.length - 1),
-        contoh: baris.slice(1, 4).map((b) => sel(b).map(teks)),
+        contoh: ambilContoh(baris.slice(1)).map((b) => sel(b).map(teks)),
       }
     })
 
@@ -81,7 +121,7 @@ export function surveiHalaman(): HasilSurvei {
     return el.tagName.toLowerCase() + (kelas ? `.${css(kelas)}` : '')
   }
   const daftar: HasilSurvei['daftar'] = []
-  for (const induk of document.querySelectorAll('body *')) {
+  for (const induk of dalam('*')) {
     if (induk.closest('table, [role=table], [role=grid]') || induk.children.length < 3 || !terlihat(induk)) continue
     const hitung = new Map<string, Element[]>()
     for (const anak of induk.children) {
@@ -91,7 +131,7 @@ export function surveiHalaman(): HasilSurvei {
     }
     for (const [item, anak] of hitung) {
       if (anak.length >= 3 && teks(anak[0]).length > 3 && !daftar.some((d) => d.penanda === penanda(induk) && d.item === item))
-        daftar.push({ penanda: penanda(induk), item, jumlah: anak.length, contoh: anak.slice(0, 3).map(teks) })
+        daftar.push({ penanda: penanda(induk), item, jumlah: anak.length, contoh: ambilContoh(anak).map(teks) })
     }
   }
   daftar.sort((a, b) => b.jumlah - a.jumlah)
@@ -101,7 +141,7 @@ export function surveiHalaman(): HasilSurvei {
     const lbl = id ? document.querySelector(`label[for="${css(id)}"]`) : el.closest('label')
     return teks(lbl) || el.getAttribute('aria-label') || el.getAttribute('placeholder') || el.getAttribute('name') || ''
   }
-  const isian = [...document.querySelectorAll('input:not([type=hidden]), select, textarea, [contenteditable=true]')]
+  const isian = dalam('input:not([type=hidden]), select, textarea, [contenteditable=true]')
     .filter(terlihat)
     .slice(0, 30)
     .map((el) => ({
@@ -112,10 +152,10 @@ export function surveiHalaman(): HasilSurvei {
       nilai: el.getAttribute('type') === 'password' ? '' : ((el as HTMLInputElement).value ?? '').slice(0, 40),
     }))
 
-  const tombol = [...new Set([...document.querySelectorAll('button, [role=button], input[type=submit]')].filter(terlihat).map((b) => teks(b) || b.getAttribute('aria-label') || '').filter(Boolean))].slice(0, 30)
+  const tombol = [...new Set(dalam('button, [role=button], input[type=submit]').filter(terlihat).map((b) => teks(b) || b.getAttribute('aria-label') || '').filter(Boolean))].slice(0, 30)
 
   const hitungAtribut = new Map<string, number>()
-  for (const el of document.querySelectorAll('*'))
+  for (const el of dalam('*'))
     for (const a of el.getAttributeNames())
       if (a.startsWith('data-') || a === 'aria-label' || a === 'name') hitungAtribut.set(a, (hitungAtribut.get(a) ?? 0) + 1)
   const atribut = [...hitungAtribut].sort((a, b) => b[1] - a[1]).slice(0, 15).map(([a, n]) => `${a} (${n}×)`)
@@ -124,7 +164,9 @@ export function surveiHalaman(): HasilSurvei {
     halaman: location.origin + location.pathname,
     judul: document.title,
     waktu: Date.now(),
-    bingkai: document.querySelectorAll('iframe').length,
+    bingkai: dalam('iframe').length,
+    bagian,
+    penandaBagian: akar === document.body ? '' : penanda(akar),
     judulBagian,
     tabel,
     daftar: daftar.slice(0, 5),
@@ -167,14 +209,24 @@ export function ringkasSurvei(h: HasilSurvei): string {
   ].join(' · ')
 }
 
-export function laporanSurvei(h: HasilSurvei): string {
+/**
+ * The survey as text for the agent. Censored by default (sensor.ts): the agent
+ * gets the structure, the selectors and the format of numbers, never customer
+ * names, phone numbers or chat text. `asli` only for pages without customer data.
+ */
+export function laporanSurvei(mentah: HasilSurvei, { asli = false } = {}): string {
+  const h = asli ? mentah : sensorSurvei(mentah)
   return [
     'Laporan survei halaman dari Dashboard Otomasi',
     `Halaman: ${h.halaman}`,
     `Judul: ${h.judul}`,
     `Waktu: ${new Date(h.waktu).toLocaleString('id-ID')}`,
-    ...(h.bingkai ? [`Catatan: halaman punya ${h.bingkai} iframe; isinya tidak ikut disurvei.`] : []),
-    'Isi: struktur halaman dan paling banyak 3 contoh baris per daftar. Kata sandi tidak pernah dibaca.',
+    `Yang disurvei: ${h.bagian ?? 'seluruh halaman'}${h.penandaBagian ? ` (${h.penandaBagian})` : ''}`,
+    ...(h.bingkai ? [`Catatan: bagian ini punya ${h.bingkai} iframe; isinya tidak ikut disurvei.`] : []),
+    'Isi: struktur halaman dan paling banyak 3 contoh baris per daftar (2 pertama + 1 terakhir). Kata sandi tidak pernah dibaca.',
+    asli
+      ? 'Contoh baris: teks ASLI (pemilik memilih tanpa sensor).'
+      : 'Contoh baris: disensor. Nomor HP, email dan angka panjang diganti; kata diganti huruf depannya ("Bu Siti" → "B… S…"). Angka, harga, tanggal dan kode tetap.',
     '',
     JSON.stringify(h, null, 2),
   ].join('\n')

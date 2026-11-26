@@ -136,7 +136,8 @@ export async function statusUmum(): Promise<StatusUmum> {
   if (semuaTabel.length === 0) {
     return { tingkat: 'perhatian', kalimat: 'Belum ada tabel data', saran: 'Kirim contoh datamu ke agent, supaya agent menyusun tabelnya.' }
   }
-  for (const t of semuaTabel) {
+  // Tables that fill up over time (bolehKosong) may be empty on day one.
+  for (const t of semuaTabel.filter((x) => !x.bolehKosong)) {
     if ((await semuaBaris(t.id)).length === 0)
       return { tingkat: 'perhatian', kalimat: `Tabel ${t.nama} masih kosong`, saran: 'Isi di halaman Data: impor file CSV atau tambah baris.' }
   }
