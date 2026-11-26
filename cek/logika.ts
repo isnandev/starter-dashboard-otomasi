@@ -1,10 +1,24 @@
 // `npm run cek`: checks the proof rules with plain Node (no browser, no test framework).
 // If one of these fails, the dashboard could call a broken connection "terbukti".
-import assert from 'node:assert/strict'
-import { bacaCsv, bandingkanTulisan, cekTulisan, keAngka, keTanggal, periksaBacaan, periksaBaris } from '../src/lib/periksa.ts'
-import { samarkanTeks, sensorBaris, sensorSurvei, sensorTeks } from '../src/lib/sensor.ts'
+import dasar from 'node:assert/strict'
+import { bacaCsv, bandingkanTulisan, cekTulisan, JADWAL_CEK_TULISAN, keAngka, keTanggal, periksaBacaan, periksaBaris } from '../src/lib/periksa.ts'
+import { samarkanTeks, sensorAngka, sensorBaris, sensorPerubahan, sensorSurvei, sensorTeks } from '../src/lib/sensor.ts'
 import type { HasilSurvei } from '../src/lib/survei.ts'
 import type { Baris, Tabel } from '../src/lib/types.ts'
+
+// Counts every check, so the last line says how many passed.
+let jumlah = 0
+const assert = new Proxy(dasar, {
+  get(t, k) {
+    const f = Reflect.get(t, k)
+    return typeof f === 'function'
+      ? (...a: unknown[]) => {
+          jumlah++
+          return f(...a)
+        }
+      : f
+  },
+})
 
 const s = { kunci: 'kode', kolom: [{ id: 'kode', label: 'Kode' }, { id: 'jumlah', label: 'Jumlah', jenis: 'angka' as const }] }
 
@@ -103,20 +117,69 @@ assert.equal(samarkanTeks('Stok Habis', new Set(['stok'])), 'Stok H…')
     waktu: 0,
     bingkai: 0,
     bagian: 'bagian utama halaman',
-    judulBagian: ['Ani Lestari'],
+    judulBagian: ['Daftar Produk', 'Pengaturan Stok'],
     tabel: [{ penanda: 'table', baris: 'tr', sel: 'td', kolom: ['Nama', 'Stok'], isiSel: ['teks', 'teks'], jumlahBaris: 2, contoh: [['Ani Lestari', '30'], ['Pak Budi 081234567890', '2']] }],
     daftar: [{ penanda: 'div', item: 'div.pesan', jumlah: 5, contoh: ['Mbak, pesen 2 ya, kirim ke Jl. Melati 5', 'ok', 'Makasih kak'] }],
     isian: [{ label: 'Cari', penanda: 'input[name="q"]', jenis: 'text', nilai: 'Ani' }],
-    tombol: ['Kirim'],
+    tombol: ['Simpan perubahan', 'Ubah stok', 'Tambah produk', 'Telepon (021) 555 1234'],
     atribut: [],
   }
   const s = sensorSurvei(survei)
   const teks = JSON.stringify(s)
-  for (const pribadi of ['Ani', 'Lestari', 'Budi', '081234567890', 'Melati']) assert.ok(!teks.includes(pribadi), `"${pribadi}" lolos sensor`)
+  for (const pribadi of ['Ani', 'Lestari', 'Budi', '081234567890', 'Melati', '555 1234']) assert.ok(!teks.includes(pribadi), `"${pribadi}" lolos sensor`)
   assert.equal(s.disensor, true)
   assert.deepEqual(s.tabel[0].kolom, ['Nama', 'Stok'])
   assert.equal(s.tabel[0].contoh[0][1], '30')
   assert.equal(s.isian[0].penanda, 'input[name="q"]')
+  assert.equal(s.isian[0].label, 'Cari')
+  // The page's own UI text stays readable: the agent builds selectors and tulis() from it.
+  assert.deepEqual(s.tombol, ['Simpan perubahan', 'Ubah stok', 'Tambah produk', 'Telepon [nomor telepon]'])
+  assert.deepEqual(s.judulBagian, ['Daftar Produk', 'Pengaturan Stok'])
+}
+
+// Dates, times and timestamps are not long numbers; landlines are censored.
+for (const [masuk, keluar] of [
+  ['2026-11-26', '2026-11-26'],
+  ['2026-11-26 10:30', '2026-11-26 10:30'],
+  ['2026-11-26T10:30:00', '2026-11-26T10:30:00'],
+  ['26/11/2026 10:30', '26/11/2026 10:30'],
+  ['26-11-2026 10.30', '26-11-2026 10.30'],
+  ['waktu 1795000000000', 'waktu 1795000000000'], // Date.now() in ms
+  ['Rp 12.500.000', 'Rp 12.500.000'],
+  ['stok 120 300 450', 'stok 120 300 450'],
+  ['rek 1234567890', 'rek [angka panjang]'],
+  ['rek 123-456-7890', 'rek [angka panjang]'],
+  ['NIK 3507 0123 4567 8901', 'NIK [angka panjang]'],
+  ['(021) 555 1234', '[nomor telepon]'],
+  ['telp 0341-551234', 'telp [nomor telepon]'],
+  ['+62 21 555 1234', '[nomor HP]'],
+] as const)
+  assert.equal(sensorTeks(masuk), keluar, masuk)
+assert.equal(sensorAngka(1795000000000), 1795000000000)
+assert.equal(sensorAngka(3507012345678901), '[angka panjang]')
+assert.equal(sensorAngka(12500), 12500)
+
+// Failure reports: a name used as a row key doesn't reach the agent.
+assert.deepEqual(
+  sensorPerubahan(
+    [{ kunci: 'Bu Siti', kolom: 'status', dari: 'Baru', ke: 'Dikirim', label: 'Bu Siti' }, { kunci: 'KR-07', kolom: 'stok', dari: 30, ke: 31 }],
+    [{ id: 'status', label: 'Status', aman: true }, { id: 'stok', label: 'Stok', jenis: 'angka' }],
+    'pelanggan',
+  ),
+  [{ kunci: 'B… S…', kolom: 'status', dari: 'Baru', ke: 'Dikirim', label: 'B… S…' }, { kunci: 'KR-07', kolom: 'stok', dari: 30, ke: 31 }],
+)
+
+// The page is reloaded only after it had time to finish a save (at least 8 s after tulis).
+{
+  const urutan: string[] = []
+  await cekTulisan([{ kunci: 'A1', kolom: 'jumlah', ke: 1 }], 'kode', {
+    baca: async () => [{ kode: 'A1', jumlah: '0' }],
+    muatUlang: async () => void urutan.push('muat ulang'),
+    tidur: async (ms) => void urutan.push(String(ms)),
+  })
+  const sebelum = urutan.slice(0, urutan.indexOf('muat ulang')).reduce((a, x) => a + Number(x), 0)
+  assert.ok(sebelum >= 8000, `muat ulang setelah ${sebelum} ms`)
+  assert.ok(JADWAL_CEK_TULISAN.some((l) => l.muatUlang && l.tenangDulu))
 }
 // Bukti rows: only `aman` columns keep their text; numbers stay.
 assert.deepEqual(
@@ -153,4 +216,4 @@ assert.match(periksaBaris(t, { kode: 'A1', jumlah: '2', tgl: '31/02/2026' }) ?? 
 assert.throws(() => bacaCsv('kode,jumlah\nA1,1\nA1,2', t), /baris 3: "A1" sudah ada/)
 assert.throws(() => bacaCsv('kode\nA1', t), /kolom "jumlah"/)
 
-console.log('cek logika: semua lulus')
+console.log(`cek logika: semua lulus (${jumlah} pemeriksaan)`)

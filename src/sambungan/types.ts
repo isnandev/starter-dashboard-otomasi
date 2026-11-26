@@ -39,8 +39,10 @@ export interface Sambungan {
   /**
    * After `tulis`, when the page still shows the old values, the dashboard
    * reloads the page once and reads again (many pages only show a saved value
-   * after a refresh). Set false only when reloading this page would lose
-   * something, e.g. a half-typed message.
+   * after a refresh). The reload comes at least 8 s after `tulis` resolves,
+   * so `tulis` must resolve only once the page confirms the save. Set false
+   * when reloading this page would lose something (a half-typed message), or
+   * when its saves can take longer than that.
    */
   muatUlangSaatCek?: boolean
 }

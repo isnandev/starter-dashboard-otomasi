@@ -2,7 +2,7 @@ import { sambungan as semuaSambungan } from '@/sambungan'
 import type { Sambungan } from '@/sambungan/types'
 import { ambil, simpan, tambahRiwayat } from './db'
 import { cekTulisan, periksaBacaan } from './periksa'
-import { sensorBaris } from './sensor'
+import { samarkanTeks, sensorBaris, sensorPerubahan, sensorTeks } from './sensor'
 import type { Baris, Bukti, Perubahan, StatusSambungan } from './types'
 
 // Proof for every connection. A sambungan is "terbukti" (proven) only after
@@ -102,7 +102,7 @@ export async function bacaTerbukti(s: Sambungan): Promise<{ baris: Baris[]; bukt
     return gagal(
       s,
       { pesan: `Data yang terbaca belum benar: ${masalah[0]}`, saran: 'Salin laporan untuk agent. Agent perlu survei ulang halamannya.' },
-      { masalah, contoh: Array.isArray(baris) ? sensorBaris(baris.slice(0, 3), s.kolom) : baris, halaman: alamat(tab.url) },
+      { masalah: masalah.map((m) => sensorKutipan(m, s)), contoh: Array.isArray(baris) ? sensorBaris(baris.slice(0, 3), s.kolom) : baris, halaman: alamat(tab.url) },
     )
   }
   return { baris, bukti: await simpanBukti(s, tab, baris) }
@@ -126,6 +126,15 @@ async function bacaUntukCek(s: Sambungan, tab: chrome.tabs.Tab): Promise<Baris[]
   const masalah = periksaBacaan(s, baris)
   if (masalah.length) throw new Error(masalah[0])
   return baris
+}
+
+/**
+ * Read errors quote page values ('"Bu Siti" terbaca dua kali'). Quoted text
+ * that is not one of the sambungan's column names is censored like a sample.
+ */
+function sensorKutipan(teks: string, s: Sambungan): string {
+  const nama = new Set([s.kunci, ...s.kolom.flatMap((k) => [k.id, k.label])])
+  return sensorTeks(teks).replace(/"([^"]*)"/g, (utuh, isi: string) => (nama.has(isi) ? utuh : `"${samarkanTeks(isi)}"`))
 }
 
 /** Reloads the tab and waits until it has finished loading (at most 20 s). */
@@ -196,7 +205,8 @@ export async function tulisTerbukti(s: Sambungan, perubahan: Perubahan[]): Promi
           saran: saranCekDulu,
         }
       : { pesan: 'Setelah menyimpan, halamannya tidak bisa dibaca ulang', saran: saranCekDulu },
-    { belumBerubah: cek.belum, catatanCek: cek.catatan },
+    // The technical part is copied to the agent: censor keys and values like sample rows.
+    { belumBerubah: sensorPerubahan(cek.belum, s.kolom, s.kunci), catatanCek: cek.catatan.map((c) => sensorKutipan(c, s)) },
   )
 }
 

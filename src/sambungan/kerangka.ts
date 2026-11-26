@@ -56,8 +56,11 @@ export const kerangka: Sambungan = {
   // Only when the rancangan changes something on this page. Remove otherwise.
   async tulis() {
     // TODO: fill the inputs found in the survey and press the page's own save
-    // button; wait until the page confirms. Return only after saving.
-    // The dashboard then re-reads the page and fails if the values didn't stick.
+    // button; wait until the page confirms (a toast, the dialog closing, the
+    // button turning back). Return only after that: the dashboard re-reads
+    // the page, and if it still shows old values it reloads the page about
+    // 8 s later, which would cut off a save that is still being sent.
+    // It fails only if the values don't show, even after the reload.
     // Most web apps ignore `input.value = x`. Inside the page, use the native
     // setter and fire an input event so the page notices:
     //   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!

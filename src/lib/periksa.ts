@@ -118,6 +118,8 @@ export interface LangkahCek {
   tunggu: number
   /** Reload the page first (skipped when the sambungan can't be reloaded). */
   muatUlang?: boolean
+  /** With `muatUlang`: wait this long (ms) before reloading, so a slow save can finish. */
+  tenangDulu?: number
 }
 
 /**
@@ -126,8 +128,18 @@ export interface LangkahCek {
  * until the page is refreshed. Calling that "gagal" made owners retry a write
  * that had already landed, which can apply it twice. So: two quick re-reads,
  * then one reload of the page and two more re-reads.
+ *
+ * A reload could cut off a save that is still being sent. `tulis` must only
+ * resolve after the page confirms the save (see kerangka.ts), and the reload
+ * comes no earlier than 8 s after that (1 + 3 + 4 s), so a save the page has
+ * confirmed is not interrupted.
  */
-export const JADWAL_CEK_TULISAN: LangkahCek[] = [{ tunggu: 1000 }, { tunggu: 3000 }, { tunggu: 2000, muatUlang: true }, { tunggu: 4000 }]
+export const JADWAL_CEK_TULISAN: LangkahCek[] = [
+  { tunggu: 1000 },
+  { tunggu: 3000 },
+  { tunggu: 2000, muatUlang: true, tenangDulu: 4000 },
+  { tunggu: 4000 },
+]
 
 export interface HasilCekTulisan {
   /** Changes that still don't show. Empty = proven. */
@@ -156,6 +168,7 @@ export async function cekTulisan(
   for (const [i, langkah] of jadwal.entries()) {
     if (langkah.muatUlang) {
       if (!alat.muatUlang) continue
+      if (langkah.tenangDulu) await tidur(langkah.tenangDulu)
       await alat.muatUlang()
       hasil.dimuatUlang = true
       hasil.catatan.push('Halaman dimuat ulang supaya angka terbarunya tampil')
